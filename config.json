@@ -2,5 +2,6 @@
     "dataset": "smallnorb",
     "val_split_strategy": "loio",
     "batch_size": 64,
-    "val_fraction": 0.1 
+    "val_fraction": 0.1,
+    "model_size": "small" 
 }

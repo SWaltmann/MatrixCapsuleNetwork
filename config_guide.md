@@ -30,3 +30,14 @@ Defines the fraction of training samples to use for validation when `val_split_s
 
 - Must be a **float between 0 and 1** (e.g., `0.1` for 10%).
 - **Ignored** if `val_split_strategy` is set to `"loio"`.
+
+
+## Model Size (`model_size`)
+
+Specifies which version of the Capsule Network architecture to use, as described in the *Matrix Capsules with EM Routing* paper by Hinton et al.
+
+Options:
+- `"full"`: The full version of the network, which is the primary model used throughout the paper. It includes more capsule channels and routing units, resulting in higher parameter count and typically better performance.
+- `"small"`: A reduced version of the network described in Section 5 of the paper. It uses fewer parameters to demonstrate the model's efficiency and generalization with a lightweight configuration.
+
+This setting adjusts the number of capsules and other architectural details while keeping the overall structure of the model (e.g., EM routing) consistent.

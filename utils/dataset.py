@@ -3,8 +3,8 @@ import tensorflow_datasets as tfds
 
 class Dataset:
     def __init__(self, config):
-        # Not calling any function here makes it easier to unit test:)
-        # Calling Dataset.get_smallnorb() returns preprocessed smallnorb dataset
+        # Not calling any function here makes it easier to unit test:) Calling 
+        # .get_data() returns preprocessed dataset as specified in config.json
         self.dataset_name = config['dataset_name']
 
         self.config = config
@@ -129,3 +129,7 @@ class Dataset:
         else:
             return self.train_ds, self.val_ds, self.test_ds
 
+    def get_data(self):
+        if self.config['dataset_name'] == 'smallnorb':
+            self.input_shape = [32, 32, 2]
+            return self.get_smallnorb()
