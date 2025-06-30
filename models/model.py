@@ -36,15 +36,11 @@ class MatrixCapsuleNetwork:
         config = self.config
 
         if config['dataset_name'] == 'smallnorb':
-            if config['loss_function'] == 'spread_loss':
-                concatenate_stepcounter = True
-            else:
-                concatenate_stepcounter = False
-                
+
             if config['model_size'] == 'full':
-                self.model = mcn.em_capsnet_graph(input_shape, concatenate_stepcounter)
+                self.model = mcn.em_capsnet_graph(input_shape)
             else:  # Only other option is small
-                self.model = mcn.small_em_capsnet_graph(input_shape, concatenate_stepcounter)
+                self.model = mcn.small_em_capsnet_graph(input_shape)
 
         # Make sure we do not accidentally re-use over this save_path
         config['use_pretrained'] = False
@@ -89,7 +85,7 @@ class MatrixCapsuleNetwork:
 
         return optimizer
     
-    def get_loss_fn(self):
+    def get_loss_fn(self, optimizer):
         config = self.config
         if config['loss_function'] == 'cross_entropy':
             # Our logits behave like activations, so we can use the 
@@ -99,7 +95,10 @@ class MatrixCapsuleNetwork:
         elif config['loss_function'] == 'spread_loss':
             sched = config['margin_schedule']
             loss_fn = loss_functions.SpreadLoss(sched, 
-                                                config['max_margin_steps'])
+                                                config['max_margin_steps'],
+                                                optimizer)
+        elif config['loss_function'] == 'squared_hinge':
+            loss_fn = loss_functions.CategoricalSquaredHinge()
         else:
             raise(NotImplementedError("This loss function is not implemented"))
         
@@ -112,7 +111,7 @@ class MatrixCapsuleNetwork:
         self.get_model()
 
         optimizer = self.get_optimizer()
-        loss_fn = self.get_loss_fn()
+        loss_fn = self.get_loss_fn(optimizer)
         self.model.compile(loss=loss_fn, 
                            optimizer=optimizer,
                            run_eagerly=config['run_eagerly'],

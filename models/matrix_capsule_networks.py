@@ -37,12 +37,7 @@ def em_capsnet_graph(input_shape, stepcount=False):
 
     squeezed_outputs = Squeeze()(outputs)
 
-    if stepcount:
-        # This concatenates the stepcount to acts!
-        # Please check the README to see how and why
-        poses, acts = StepCounter(name='step_counter')(squeezed_outputs)
-    else:
-        poses, acts = squeezed_outputs
+    poses, acts = squeezed_outputs
 
     return tf.keras.Model(inputs=inputs,outputs=acts, name='full_EM_CapsNet')
 
@@ -75,12 +70,7 @@ def small_em_capsnet_graph(input_shape, stepcount=False):
 
     squeezed_outputs = Squeeze()(outputs)
 
-    if stepcount:
-        # This concatenates the stepcount to acts!
-        # Please check the README to see how and why
-        poses, acts = StepCounter(name='step_counter')(squeezed_outputs)
-    else:
-        poses, acts = squeezed_outputs
+    poses, acts = squeezed_outputs
 
     return tf.keras.Model(inputs=inputs,outputs=acts, name='small_EM_CapsNet')
    
