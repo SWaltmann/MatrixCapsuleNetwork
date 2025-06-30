@@ -11,12 +11,12 @@
     "lr_decay_rate": 0.96,
     "lr_decay_steps": 2e4,
 
-    "loss_function": "spread_loss",
-    "margin_schedule": "sigmoid",
+    "loss_function": "cross_entropy",
+    "margin_schedule": "linear",
     "optimizer":"adamw",
     "max_margin_steps": 5e4,
 
     "run_eagerly": false,
-    "epochs":5
+    "epochs":50
 
 }
