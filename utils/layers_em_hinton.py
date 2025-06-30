@@ -662,7 +662,7 @@ class Squeeze(tf.keras.layers.Layer):
 
     def call(self, inputs):
         # Shapes are [batch, height, width, capsules, atom, atom]
-        poses, acts, steps = inputs
+        poses, acts = inputs
         
         acts = tf.debugging.check_numerics(acts, message="acts in Squeeze")
         poses = tf.debugging.check_numerics(poses, message="poses in Squeeze")
@@ -674,27 +674,23 @@ class Squeeze(tf.keras.layers.Layer):
         acts = tf.squeeze(acts, [1, 2, 4, 5])
         # acts is now [batch, capsules] ie one-hot predictions
 
-        batch_size = tf.shape(acts)[0]
+       
 
-        step_tiled = tf.tile(tf.expand_dims(steps, axis=0), [batch_size])
-        step_tiled = tf.expand_dims(step_tiled, axis=-1)  # shape [B, 1]
-        step_tiled = tf.cast(step_tiled, tf.float32)
-        acts_steps = tf.concat([acts, step_tiled], axis=-1)  # shape [B, C+1]
-
-
-        return poses, acts_steps
+        return poses, acts
     
 
 class StepCounter(tf.keras.layers.Layer):
+    """This Layer counts the training steps, and concatenates them to the acitvations.
+    Should be used only in combination with a loss function that expects this weird 
+    output. Should be the final layer, since no other layer expects this."""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # self.step_counter = tf.Variable(0, trainable=False, dtype=tf.int32)
 
     def build(self, input_shape):
         self.step_counter = self.add_weight(
             name='step_counter',
             shape=(),
-            dtype=tf.float32,
+            dtype=tf.float32,  # int makes more sense, but that does not work on GPU
             initializer='zeros',
             trainable=False
         )
@@ -703,7 +699,16 @@ class StepCounter(tf.keras.layers.Layer):
     def call(self, inputs, training=None):
         if training:
             self.step_counter.assign_add(1)
-        return inputs, self.step_counter
+        
+        poses, acts = inputs
+        batch_size = tf.shape(acts)[0]
+
+        step_tiled = tf.tile(tf.expand_dims(self.step_counter, axis=0), [batch_size])
+        step_tiled = tf.expand_dims(step_tiled, axis=-1)  # shape [B, 1]
+        step_tiled = tf.cast(step_tiled, tf.float32)
+        acts_steps = tf.concat([acts, step_tiled], axis=-1)  # shape [B, C+1]
+
+        return poses, acts_steps
 
 
 

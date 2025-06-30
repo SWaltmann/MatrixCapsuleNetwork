@@ -36,10 +36,15 @@ class MatrixCapsuleNetwork:
         config = self.config
 
         if config['dataset_name'] == 'smallnorb':
+            if config['loss_function'] == 'spread_loss':
+                concatenate_stepcounter = True
+            else:
+                concatenate_stepcounter = False
+                
             if config['model_size'] == 'full':
-                self.model = mcn.em_capsnet_graph(input_shape)
+                self.model = mcn.em_capsnet_graph(input_shape, concatenate_stepcounter)
             else:  # Only other option is small
-                self.model = mcn.small_em_capsnet_graph(input_shape)
+                self.model = mcn.small_em_capsnet_graph(input_shape, concatenate_stepcounter)
 
         # Make sure we do not accidentally re-use over this save_path
         config['use_pretrained'] = False
