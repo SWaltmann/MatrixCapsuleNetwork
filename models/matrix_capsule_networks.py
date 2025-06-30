@@ -1,7 +1,7 @@
 
 import numpy as np
 import tensorflow as tf
-from utils.layers_em_hinton import ReLUConv, PrimaryCaps, ConvCaps, ClassCaps, EMRouting, DebugLayer, Squeeze
+from utils.layers_em_hinton import ReLUConv, PrimaryCaps, ConvCaps, ClassCaps, EMRouting, DebugLayer, Squeeze, StepCounter
 
 def em_capsnet_graph(input_shape):
     """ Architecture of EM CapsNet, as described in: 'Matrix Capsules with EM Routing '
@@ -35,9 +35,15 @@ def em_capsnet_graph(input_shape):
 
     outputs = EMRouting()(class_caps)
 
+    outputs, steps = StepCounter(name='step_counter')(outputs)
+
     poses, acts = outputs
 
-    return tf.keras.Model(inputs=inputs,outputs=acts, name='full_EM_CapsNet')
+    outputs = (poses, acts, steps)
+
+    poses, acts_steps = Squeeze()(outputs)
+
+    return tf.keras.Model(inputs=inputs,outputs=acts_steps, name='full_EM_CapsNet')
 
 def small_em_capsnet_graph(input_shape):
     height, width = input_shape[0], input_shape[1]
@@ -66,11 +72,15 @@ def small_em_capsnet_graph(input_shape):
     class_caps = ClassCaps(position_grid)(routing2)
     outputs = EMRouting()(class_caps) 
 
-    outputs = Squeeze()(outputs)
+    outputs, steps = StepCounter(name='step_counter')(outputs)
 
     poses, acts = outputs
 
-    return tf.keras.Model(inputs=inputs,outputs=acts, name='small_EM_CapsNet')
+    outputs = (poses, acts, steps)
+
+    poses, acts_steps = Squeeze()(outputs)
+
+    return tf.keras.Model(inputs=inputs,outputs=acts_steps, name='small_EM_CapsNet')
    
 def position_grid(grid, kernel_size, stride, padding):
     # Grid should be (1, H, W, 2) - where the 

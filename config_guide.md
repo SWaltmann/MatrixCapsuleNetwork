@@ -41,3 +41,48 @@ Options:
 - `"small"`: A reduced version of the network described in Section 5 of the paper. It uses fewer parameters to demonstrate the model's efficiency and generalization with a lightweight configuration.
 
 This setting adjusts the number of capsules and other architectural details while keeping the overall structure of the model (e.g., EM routing) consistent.
+
+
+## Learning Rate (`learning_rate`)
+
+Sets the initial learning rate for the optimizer.
+
+This is the base value from which exponential decay is applied (if enabled).
+
+
+## Learning Rate Decay Rate (`lr_decay_rate`)
+
+Specifies the decay factor used in exponential learning rate decay.
+
+- Must be a float between 0 and 1 (e.g., `0.96` reduces the learning rate by 4% every decay step).
+- If set to `0` or a negative value, **learning rate decay is disabled**, and the learning rate remains constant throughout training.
+
+This works together with `lr_decay_steps`.
+
+
+## Learning Rate Decay Steps (`lr_decay_steps`)
+
+Defines how many training steps occur between each application of the exponential decay.
+
+- Only used when `lr_decay_rate > 0`.
+- Larger values result in slower decay.
+
+
+## Loss Function (`loss_function`)
+
+Specifies which loss function to use during training.
+
+Available options:
+- `"categorical_crossentropy"`
+- `"spread_loss"`
+
+
+### Margin Schedule (`margin_schedule`)
+
+Specifies how the margin used in Spread Loss increases over the course of training. Ignored when not using Spread Loss
+
+- `"linear"` — The margin increases linearly from **0.2 to 0.9**, as described in the *Matrix Capsules with EM Routing* paper.
+- `"sigmoid"` — The margin increases following a sigmoid curve from **0.2 to 1.0**, matching the implementation in the original code by Hinton et al. This approach results in a slower increase at the beginning and a steeper change in the middle of training.
+
+Use this to control how strictly the model is penalized for incorrect predictions over time. Gradually increasing the margin helps stabilize early training.
+

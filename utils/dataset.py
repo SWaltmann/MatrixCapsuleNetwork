@@ -14,8 +14,8 @@ class Dataset:
         self.test_ds = None
 
         # Check some config values
-        if self.dataset_name != 'SMALLNORB':
-            raise(NotImplementedError('Only implemented dataset_name=SMALLNORB'))
+        if self.dataset_name != 'smallnorb':
+            raise(NotImplementedError('Only implemented dataset_name=smallnorb'))
 
     def get_dataset_size(self, dataset):
         size = 0
@@ -42,7 +42,7 @@ class Dataset:
     def get_smallnorb_validation_split(self, train_ds):
         config = self.config
 
-        if config['validation_split'] == 'loio':
+        if config['val_split_strategy'] == 'loio':
             # Filter out instance 4 
             # Train data contains instances 4, 6, 7, 8, 9
             val_ds = train_ds.filter(lambda x: tf.equal(x["instance"], 4))
@@ -67,6 +67,7 @@ class Dataset:
 
         return train_ds_, val_ds
     
+    @staticmethod  # Do not pass self
     def preprocess_smallnorb_general(sample, test_data=False):
         im1 = sample['image']
         im2 = sample['image2']
@@ -103,12 +104,14 @@ class Dataset:
         return images, y
     
     def preprocess_smallnorb(self, train_ds, val_ds, test_ds):
-
-        def preprocess_smallnorb_train(sample):
-            return self.preprocess_smallnorb_general(sample, test_data=False)
         
+        @staticmethod  # avoids passing self which confuses tensorflow
+        def preprocess_smallnorb_train(sample):
+            return self.preprocess_smallnorb_general(sample, False)
+        
+        @staticmethod
         def preprocess_smallnorb_test(sample):
-            return self.preprocess_smallnorb_general(sample, test_data=True)
+            return self.preprocess_smallnorb_general(sample, True)
         
         batch_size = self.config['batch_size']
         self.train_ds = train_ds.map(preprocess_smallnorb_train).batch(batch_size)
@@ -124,7 +127,7 @@ class Dataset:
         # preprocessed datasets.
         if (self.test_ds is None) or (self.val_ds is None) or (self.test_ds is None):
             train_ds, test_ds = self.load_smallnorb()
-            val_ds, train_ds = self.get_smallnorb_validation_split(train_ds)
+            train_ds, val_ds = self.get_smallnorb_validation_split(train_ds)
             return self.preprocess_smallnorb(train_ds, val_ds, test_ds)
         else:
             return self.train_ds, self.val_ds, self.test_ds

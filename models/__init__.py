@@ -1,2 +1,2 @@
-from models.model import EfficientCapsNet, CapsNet, EMCapsNet
+from models.model import MatrixCapsuleNetwork
 
