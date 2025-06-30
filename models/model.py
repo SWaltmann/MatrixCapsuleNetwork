@@ -42,8 +42,9 @@ class MatrixCapsuleNetwork:
             else:  # Only other option is small
                 self.model = mcn.small_em_capsnet_graph(input_shape)
 
-        # Make sure we do not accidentally re-use over this save_path
-        config['use_pretrained'] = False
+        # Next time we call this same config_file, we will load the
+        # model instead of training from scratch
+        config['use_pretrained'] = True
         with open(config['model_path'], 'w') as config_file:
             json.dump(config, config_file, indent=4)
 
