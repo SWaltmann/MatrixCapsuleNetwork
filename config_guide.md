@@ -74,7 +74,10 @@ Specifies which loss function to use during training.
 
 Available options:
 - `"categorical_crossentropy"`
-- `"spread_loss"`
+- `"spread_loss"` — The loss described in the *Matrix Capsules with EM Routing* paper.
+- `"squared_hinge"` — Equivalent to SpreadLoss, when margin = 1.
+
+
 
 
 ### Margin Schedule (`margin_schedule`)
