@@ -54,9 +54,9 @@ class Dataset:
             if val_size+train_size!=self.full_train_size: 
                 assert(ValueError("Validation + Test set != full training data"))
 
-            # Use .take() to let tf know the size of the dataset (doesn't work)
-            val_ds = val_ds.take(val_size)
-            train_ds_ = train_ds.take(train_size)
+            # Repeat, and then take() so that tf knows the size of the dataset
+            val_ds = val_ds.repeat().take(val_size)
+            train_ds_ = train_ds.repeat().take(train_size)
 
         else:
             val_size = int(config['val_fraction'] * self.full_train_size)
