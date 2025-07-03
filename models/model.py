@@ -38,9 +38,9 @@ class MatrixCapsuleNetwork:
         if config['dataset_name'] == 'smallnorb':
 
             if config['model_size'] == 'full':
-                self.model = mcn.em_capsnet_graph(input_shape)
+                self.model = mcn.em_capsnet_graph(input_shape, _iterations=config['iterations'])
             else:  # Only other option is small
-                self.model = mcn.small_em_capsnet_graph(input_shape)
+                self.model = mcn.small_em_capsnet_graph(input_shape, _iterations=config['iterations'])
 
         # Next time we call this same config_file, we will load the
         # model instead of training from scratch
@@ -122,7 +122,7 @@ class MatrixCapsuleNetwork:
                                  epochs=config['epochs'],
                                  callbacks=self.callbacks)
         # TODO: make this a seperate function and store everything in its own little directory
-        with open("training_history.json", "w") as f:
+        with open(f"training_history{config['run_name']}.json", "w") as f:
             json.dump(history.history, f)
 
         self.save_model()
