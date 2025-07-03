@@ -39,7 +39,7 @@ class Dataset:
 
         return train_ds, test_ds
     
-    def get_smallnorb_validation_split(self, train_ds):
+    def get_smallnorb_validation_split(self, train_ds, test_ds):
         config = self.config
 
         if config['val_split_strategy'] == 'loio':
@@ -58,12 +58,17 @@ class Dataset:
             val_ds = val_ds.repeat().take(val_size)
             train_ds_ = train_ds.repeat().take(train_size)
 
+        elif config['val_split_strategy'] == 'test':
+            print("Using the full test set for validation")
+            val_ds = test_ds
+            train_ds_ = train_ds
+        
         else:
             val_size = int(config['val_fraction'] * self.full_train_size)
             train_ds_ = train_ds.skip(val_size)
             val_ds = train_ds.take(val_size)
 
-        print(f"Validation size is {val_size}")
+            print(f"Validation size is {val_size}")
 
         return train_ds_, val_ds
     
@@ -127,7 +132,7 @@ class Dataset:
         # preprocessed datasets.
         if (self.test_ds is None) or (self.val_ds is None) or (self.test_ds is None):
             train_ds, test_ds = self.load_smallnorb()
-            train_ds, val_ds = self.get_smallnorb_validation_split(train_ds)
+            train_ds, val_ds = self.get_smallnorb_validation_split(train_ds, test_ds)
             return self.preprocess_smallnorb(train_ds, val_ds, test_ds)
         else:
             return self.train_ds, self.val_ds, self.test_ds
