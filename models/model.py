@@ -16,6 +16,7 @@ class MatrixCapsuleNetwork:
         args: config is read from config.json to get the settings. If no save_path is provided we will create a new model, else we load from the save path."""        
         self.load_config(config_path)  # Create self.config
         self.callbacks = []
+        self.config_path = config_path
 
     def load_config(self, config_path):
         with open(config_path, 'r') as config_file:
@@ -45,7 +46,7 @@ class MatrixCapsuleNetwork:
         # Next time we call this same config_file, we will load the
         # model instead of training from scratch
         config['use_pretrained'] = True
-        with open(config['model_path'], 'w') as config_file:
+        with open(self.config_path, 'w') as config_file:
             json.dump(config, config_file, indent=4)
 
         return self.model
