@@ -18,6 +18,15 @@ class MatrixCapsuleNetwork:
         self.callbacks = []
         self.config_path = config_path
 
+    def save_best_model(self):
+        save_path = 'BEST_'+ self.config['model_path']
+        checkpoint = tf.keras.callbacks.ModelCheckpoint(
+            save_path,
+            monitor='val_accuracy',  # Save model that gets highest accuracy on validation set
+            save_best_only=True,
+            mode='max')
+        self.callbacks.append(checkpoint)
+
     def load_config(self, config_path):
         with open(config_path, 'r') as config_file:
             self.config = json.load(config_file)
@@ -114,6 +123,7 @@ class MatrixCapsuleNetwork:
 
         optimizer = self.get_optimizer()
         loss_fn = self.get_loss_fn(optimizer)
+        self.save_best_model()
         self.model.compile(loss=loss_fn, 
                            optimizer=optimizer,
                            run_eagerly=config['run_eagerly'],
