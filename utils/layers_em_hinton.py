@@ -353,13 +353,15 @@ class EMRouting(tf.keras.layers.Layer):
     them. This layer takes the activations and poses and finds the new 
     activations.
     """
-    def __init__(self, mean_data=1, iterations=2, min_var=0.0005, final_beta=0.01, epsilon_annealing=False, **kwargs):
+    def __init__(self, mean_data=1, iterations=2, min_var=0.0005, final_beta=0.01, epsilon_annealing=False, stride=1, original_shape=None, **kwargs):
         super(EMRouting, self).__init__(**kwargs)
         self.iterations = iterations
         self.min_var = min_var
         self.final_lambda = final_beta
         self.verbose = False
         self.epsilon = 1e-7
+        self.stride=stride  # Stride used to create the patches
+
         # From Gritzman. Has to be manually calcualted for now
         self.mean_data = mean_data  # if 1, this does nothing
 
@@ -403,8 +405,17 @@ class EMRouting(tf.keras.layers.Layer):
 
         self.pose_shape_in = input_shape[0]
         ps = self.pose_shape_in
-        b, h, w, i, o, a= ps[0], ps[1], ps[2], ps[5], ps[6], ps[7]
+        b, h, w, k, i, o, a = ps[0], ps[1], ps[2], ps[3], ps[5], ps[6], ps[7]
         self.act_shape_in = input_shape[1]
+
+        self.kernel_size = k
+        self.height = h
+        self.width = w
+        self.ch_in = i  # num low-level capsules
+        self.ch_out  = o  # num high_level capsules
+        self.atom = a  # usually 4 (from the 4x4 pose matrix)
+
+        s = self.stride
 
 
         p_shape = self.pose_shape_in
@@ -422,6 +433,12 @@ class EMRouting(tf.keras.layers.Layer):
             initializer=tf.constant_initializer(0.5),
             name='sigma_bias'
         ) 
+
+        # Create indices for the E-step
+        print("Building scatter indices. This might take a while...")
+        self.build_scatter_indices(h, w, k, k, s)
+        print("Built scatter indices!")
+
         self.built = True
 
         
@@ -442,17 +459,43 @@ class EMRouting(tf.keras.layers.Layer):
 
         vs = tf.shape(votes)
         b, h, w, k, i, o, a = vs[0], vs[1], vs[2], vs[3], vs[5], vs[6], vs[7]
+        self.batch_size = b
 
         # Initialize empty tensors as input for 1st iter of the routing loop
         self.out_activations = tf.zeros((b, h, w, 1, 1, 1, o, 1, 1))
         self.out_poses = tf.zeros((b, h, w, 1, 1, 1, o, a, a))
         # post in Hinton's implementation
-        self.R_ij = tf.nn.softmax(tf.zeros((b, h, w, 1, 1, i, o, 1, 1)), axis=6)
+        self.R_ij = tf.nn.softmax(tf.zeros((b, h, w, k, k, i, o, 1, 1)), axis=6)
         self.R_ij_prev = self.R_ij
+
+
+        # We must add the batch dimension to the indices used for scatter_nd
+        batch_size = b
+        tiled_indices = tf.tile(tf.expand_dims(self.scatter_indices_no_batch, 0), [batch_size, 1, 1])
+
+        batch_indices = tf.reshape(tf.range(batch_size), (-1, 1, 1)) 
+        batch_indices = tf.tile(batch_indices, [1, tf.shape(self.scatter_indices_no_batch)[0], 1])
+
+        # Concatenate batch indices with the base tensor
+        result = tf.concat([batch_indices, tiled_indices], axis=-1) 
+        self.scatter_indices = tf.reshape(result, [-1, 3])
+
+        # Calculate shape of reconstructed grid
+        height_reconstruct = h * self.stride + k - self.stride
+        width_reconstruct = w * self.stride + k - self.stride
+        self.scatter_shape = tf.convert_to_tensor([b, 
+                                                   height_reconstruct, 
+                                                   width_reconstruct,
+                                                   i,
+                                                   o,
+                                                   1,
+                                                   1])
+
 
 
         # Perform routing
         for i in range(self.iterations - 1):
+            print(f"Starting iteration {i+1}")
             if self.verbose:
                 print(f"STARTING ITERATION {i+1}")
             self.m_step(activations, votes, i, epsilon)
@@ -462,6 +505,7 @@ class EMRouting(tf.keras.layers.Layer):
         # Last routing iteration only requires the m-step
         if self.verbose:
             print(f"FINAL ITERATION ({i+2})")
+        print(f"FINAL ITERATION ({i+2})")
         self.m_step(activations, votes, self.iterations, epsilon)
         if self.verbose:
             print("-"*60)
@@ -535,6 +579,10 @@ class EMRouting(tf.keras.layers.Layer):
         # preactivate_unrolled in Hinton's implementation. Hinton then
         # combines this with the old value to get 'center'. But we skip
         # that step since it is not mentioned in the paper.
+        print(f"R_ij: {tf.reduce_mean(R_ij)}")
+        print(f"V_ij: {tf.reduce_mean(V_ij)}")
+        print(f"sum_R_ij: {tf.reduce_mean(sum_R_ij)}")
+
         mu_jh = (tf.reduce_sum(R_ij * V_ij, axis=[3,4,5], keepdims=True) 
                 / (sum_R_ij + epsilon))  # e-7 from Hinton's implementation
                 # e-7 prevents numerical instability (Gritzman, 2019)
@@ -587,8 +635,8 @@ class EMRouting(tf.keras.layers.Layer):
         # Could have done that immediately but wanted to follow paper's notation
         # a_j = tf.nn.softmax(a_j, axis=6)
         self.out_activations = a_j
-        self.out_poses = mu_jh
-        self.sigma_jh_sq = sigma_jh_sq
+        self.out_poses = mu_jh + epsilon
+        self.sigma_jh_sq = sigma_jh_sq + epsilon
         # R_ij is updated and assigned in e_step
 
     def e_step(self, V_ij):
@@ -621,37 +669,109 @@ class EMRouting(tf.keras.layers.Layer):
         mu_jh = self.out_poses
         a_j = self.out_activations
 
-        # Compute the log probability (log p_j)
+        print(f"mu mean = {tf.reduce_mean(mu_jh)}")
+        print(f"acts = {tf.reduce_mean(a_j)}")
+        print(f"V_ij = {tf.reduce_mean(V_ij)}")
+
+        # Compute the log probability (log p_j) (B, H, W, K, K, I, O, 1, 1)
         log_p_j = -tf.reduce_sum(
-            tf.math.log(2 * math.pi * self.sigma_jh_sq + epsilon) +
+            tf.math.log(2 * math.pi * self.sigma_jh_sq) +
             tf.pow((V_ij - mu_jh), 2) / (2* self.sigma_jh_sq),
             axis=[-1, -2],
             keepdims=True
         )
-        if self.verbose:
-            print("p_j is:")    
-            print(tf.exp(log_p_j))
+
+        print(f"log_pj = {tf.reduce_mean(log_p_j)}")
 
         # Add log activations
-        log_a_j = tf.math.log(a_j + epsilon)
+        log_a_j = tf.math.log(a_j)
         log_a_j = tf.broadcast_to(log_a_j, tf.shape(log_p_j))
+
+        print(f"log_a_j = {tf.reduce_mean(log_a_j)}")
 
         # Compute log numerator
         log_numerator = log_a_j + log_p_j
 
-        # Compute log denominator using log-sum-exp for numerical stability
-        log_denominator = tf.reduce_logsumexp(log_numerator, axis=[3, 4, 6], keepdims=True)
+        print(f"log_numerator = {tf.reduce_mean(log_numerator)}")
 
-        # Compute log assignment probabilities
-        log_R_ij = log_numerator - log_denominator
+        # We use scatter_nd to sum over the parent capsule of the lower-level capsules
+        # This function automatically sums overlapping values but 
+        # log(a) + log(b) != log(a + b) so we convert back to normal-space (or whatever that is called)
+        ap_j = tf.exp(log_numerator - tf.reduce_max(log_numerator))
 
-        # Clip log(R_ij), so that exponentiating it never leads to too large values
-        # log_R_ij = tf.clip_by_value(log_R_ij, -200, 200)  # e^500 (=1.4e217) easily falls within the range of representable numbers by float64 (which is 1e300 or something)
-        # Convert back from log-space
-        self.R_ij = tf.exp(log_R_ij)
-        if self.verbose:
-            print("NEW R_ij is:")
-            print(self.R_ij)
+        print(f"ap_j = {tf.reduce_mean(ap_j)}")
+
+        tf.debugging.assert_all_finite(ap_j, "updates has NaNs or Infs")
+        
+        # To work with scatter_nd, we reshape it to [N, update_shape] -> ie put all spatial dimensions into 1
+        updates = tf.reshape(ap_j, (self.batch_size*self.height*self.width*self.kernel_size*self.kernel_size,
+                                    self.ch_in,
+                                    self.ch_out,
+                                    1, 
+                                    1))
+        tf.debugging.assert_all_finite(updates, "updates has NaNs or Infs")
+
+        # Collect parent capsules of each child capsule
+        sum_ap_j = tf.scatter_nd(self.scatter_indices, updates, self.scatter_shape) 
+        sum_ap_j = tf.reduce_sum(sum_ap_j, axis=4, keepdims=True)
+        # [batch, height, width, child caps, 1, 1, 1]
+        tf.debugging.assert_all_finite(sum_ap_j, "sum_ap_j has NaNs or Infs")
+
+        # Recreate the patches to match shapes for normalization
+        # I re-use the logic from the ConvCaps layer
+        _shape = tf.shape(sum_ap_j)
+
+        input_reshaped = tf.reshape(sum_ap_j, (_shape[0], _shape[1], _shape[2], 
+                                            _shape[3]*_shape[4]*_shape[5]*_shape[6]))
+        # Taking patches is similar to applying convolution, We cannot use 
+        # Conv2D (for example) because it does not do matrix multiplication
+        patches = tf.image.extract_patches(input_reshaped, 
+                                                 [1, self.kernel_size, self.kernel_size, 1],
+                                                 [1, self.stride, self.stride, 1],
+                                                 [1, 1, 1, 1],
+                                                 'VALID')
+
+        # Output shape based on 'valid' padding !
+        out_height = (_shape[1] - self.kernel_size) // self.stride + 1
+        out_width = (_shape[2] - self.kernel_size) // self.stride + 1
+
+        # Reshape the patches back into pose matrices
+        sum_ap_j_patched = tf.reshape(patches,
+                                  (_shape[0], out_height, out_width,  # N, H, W
+                                  self.kernel_size, self.kernel_size,
+                                  _shape[-4], _shape[-3], _shape[-2], _shape[-1]))
+        # patches contains patches of the sums of a*p
+
+        tf.debugging.assert_all_finite(sum_ap_j_patched, "sum_ap_j_patched has NaNs or Infs")
+
+        self.R_ij = ap_j / (sum_ap_j_patched + epsilon)
+      
+
+    def build_scatter_indices(self, H, W, kH, kW, stride):
+        # The kernel x kernel patches are flattened and we need to index
+        # each element in the kernel. 
+        # First patch is in the top-left corner, so the very first element
+        # should go (0,0), the next (0, 1), until: (0, kernel_size) Then we go 
+        # to the next row in the patch: (1, 0), ..., etc until we hit then end 
+        # of the patch: (kernel_size, kernel_size). Then we move on to the 
+        # next patch, which starts at (0, stride), We do that until we hit 
+        # the final patch, then we start over for the next batch
+        indices = []
+        # We do not know the number of batches yet (and they can differ within 
+        # an epoch! The final batch consists of the remainder which is generally 
+        # not a full batch)
+        # So we prepend the batch during the call()
+        for height in range(H):
+            for width in range(W):
+                for y in range(kH):
+                    for x in range(kW):
+                        y_new = height * stride + y
+                        x_new = width * stride + x
+                        idx = [y_new, x_new]
+                        indices.append(idx)
+
+        self.scatter_indices_no_batch = tf.convert_to_tensor(indices)
+
 
 class Squeeze(tf.keras.layers.Layer):
     """ This layer only squeezes out the some singleton dimensions st the
