@@ -11,18 +11,23 @@ import time
 
 class MatrixCapsuleNetwork:
 
-    def __init__(self, config_path='config.json'):
-        """Class to handle everything round the model like loading data, compiling, training, saving/loading model. 
-        args: config is read from config.json to get the settings. If no save_path is provided we will create a new model, else we load from the save path."""        
-        self.load_config(config_path)  # Create self.config
+    def __init__(self, directory=None):
+        """Class to handle everything around the model like loading data, compiling, training, saving/loading model. 
+        the directory should contain a config.json file to specify the settings,
+        """        
+        self.directory = directory
+
+        self.config_path = os.path.join(directory, 'config.json')
+        self.load_config(self.config_path)
+
+        self.config['model_path'] = os.path.join(directory, 'latest_model.keras')
         self.callbacks = []
-        self.config_path = config_path
 
     def save_best_model(self):
-        save_path = 'BEST_'+ self.config['model_path']
+        save_path = os.path.join(self.directory, 'BEST_MODEL.keras')
         checkpoint = tf.keras.callbacks.ModelCheckpoint(
             save_path,
-            monitor='val_accuracy',  # Save model that gets highest accuracy on validation set
+            monitor='val_categorical_accuracy',  # Save model that gets highest accuracy on validation set
             save_best_only=True,
             mode='max')
         self.callbacks.append(checkpoint)
@@ -48,10 +53,21 @@ class MatrixCapsuleNetwork:
         if config['dataset_name'] == 'smallnorb':
 
             if config['model_size'] == 'full':
-                self.model = mcn.em_capsnet_graph(input_shape, _iterations=config['iterations'])
+                self.model = mcn.em_capsnet_graph(input_shape, 
+                                                  _iterations=config['iterations'],
+                                                  alpha=config['alpha'])
             else:  # Only other option is small
-                self.model = mcn.small_em_capsnet_graph(input_shape, _iterations=config['iterations'])
+                self.model = mcn.small_em_capsnet_graph(input_shape, 
+                                                        _iterations=config['iterations'],
+                                                        alpha=config['alpha'])
 
+        optimizer = self.get_optimizer()
+        loss_fn = self.get_loss_fn(optimizer)
+        self.save_best_model()
+        self.model.compile(loss=loss_fn, 
+                        optimizer=optimizer,
+                        run_eagerly=config['run_eagerly'],
+                        metrics=['categorical_accuracy'])
         # Next time we call this same config_file, we will load the
         # model instead of training from scratch
         config['use_pretrained'] = True
@@ -65,18 +81,32 @@ class MatrixCapsuleNetwork:
         save_path = config['model_path']
         if save_path is not None:
             self.model = tf.keras.models.load_model(save_path)
+            ckpt = tf.train.Checkpoint(optimizer=self.model.optimizer)
+            ckpt.restore(tf.train.latest_checkpoint(self.directory)).expect_partial()
+            self.set_loss_optimizer()
         else:
             raise(ValueError("No model save file was provided"))
         
     def save_model(self):
         config = self.config
-        self.model.save(config['model_path'])
+        self.model.save(config['model_path'], include_optimizer=True)
+        ckpt = tf.train.Checkpoint(optimizer=self.model.optimizer)
+        ckpt.save(os.path.join(self.directory, "latest_optimizer_ckpt"))
+
+
+    def set_loss_optimizer(self):
+        """SpreadLoss requires access to the optimizer's step counter (iterations)
+        during training. However, this reference cannot be serialized with the model.
+        This method injects the model's optimizer into the loss after loading.
+        """
+        self.model.loss.optimizer = self.model.optimizer
         
     def get_model(self):
         if self.config['use_pretrained']:
             self.load_model()
         else:
             self.get_model_architecture()
+        
 
     def get_optimizer(self):
         config = self.config
@@ -115,28 +145,33 @@ class MatrixCapsuleNetwork:
         
         return loss_fn
     
+    def save_history(self, history):
+        # TODO: make this a seperate function and store everything in its own little directory
+        with open("training_history.json", "w") as f:
+            json.dump(history.history, f)
+    
     def train(self):
         config = self.config
 
         self.load_dataset()
+        
         self.get_model()
 
-        optimizer = self.get_optimizer()
-        loss_fn = self.get_loss_fn(optimizer)
-        self.save_best_model()
-        self.model.compile(loss=loss_fn, 
-                           optimizer=optimizer,
-                           run_eagerly=config['run_eagerly'],
-                           metrics=['categorical_accuracy'])
+        print(f"Starting training from step {self.model.optimizer.iterations.numpy()}")
+        # TODO: append history
         history = self.model.fit(self.train_ds,
                                  validation_data=self.val_ds,
                                  epochs=config['epochs'],
                                  callbacks=self.callbacks)
-        # TODO: make this a seperate function and store everything in its own little directory
-        with open(f"training_history{config['run_name']}.json", "w") as f:
-            json.dump(history.history, f)
+        self.save_history(history)
 
         self.save_model()
+
+    def test_model(self):
+        self.load_dataset()
+        self.get_model()
+        result = self.model.evaluate(self.test_ds)
+        print(result)
 
     
 

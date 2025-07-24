@@ -1,0 +1,1 @@
+In the old setup I was saving everything in the main directory. Unfortunately and unbeknownst to me, the optimizer was not saved for all of these runs. That means training cannot be restarted for all of the runs stored in this directory. I kept them because I did not want to throw away like 20 days of running this training algorithm.

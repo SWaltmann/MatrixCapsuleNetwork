@@ -1,0 +1,22 @@
+{
+    "dataset_name": "smallnorb",
+    "val_split_strategy": "test",
+    "batch_size": 64,
+    "val_fraction": 0.1,
+    "model_size": "small",
+    "model_path": "small_modelv12.keras",
+    "run_name": "v12",
+    "use_pretrained": true,
+    "learning_rate": 0.003,
+    "lr_decay_rate": 0.96,
+    "lr_decay_steps": 20000.0,
+    "loss_function": "spread_loss",
+    "margin_schedule": "sigmoid",
+    "optimizer": "adamw",
+    "max_margin_steps": 20000.0,
+    "run_eagerly": false,
+    "epochs": 1000,
+    "iterations": 1,
+    "alpha": 0.1,
+    "comment": "This is basically Hinton's best small model, but using 1 iterations. Should be compared to v9"
+}

@@ -1,0 +1,21 @@
+{
+    "dataset_name": "smallnorb",
+    "val_split_strategy": "test",
+    "batch_size": 32,
+    "val_fraction": 0.1,
+    "model_size": "full",
+    "model_path": "experiments/original_model/latest_model.keras",
+    "use_pretrained": true,
+    "learning_rate": 0.003,
+    "lr_decay_rate": 0.96,
+    "lr_decay_steps": 40000.0,
+    "loss_function": "spread_loss",
+    "margin_schedule": "sigmoid",
+    "optimizer": "adamw",
+    "max_margin_steps": 100000.0,
+    "run_eagerly": false,
+    "epochs": 200,
+    "iterations": 3,
+    "alpha": 0.1,
+    "comment": "Halved batch size, doubled the _steps to compensate"
+}

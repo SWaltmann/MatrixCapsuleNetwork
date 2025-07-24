@@ -2,8 +2,8 @@ import tensorflow as tf
    
 
 class SpreadLoss(tf.keras.losses.Loss):
-    def __init__(self, margin_schedule, max_steps, optimizer):
-        super().__init__()
+    def __init__(self, margin_schedule, max_steps, optimizer=None, **kwargs):
+        super().__init__(**kwargs)
         self.schedule = margin_schedule
         self.max_steps = max_steps
         # We steal the step_counter from the optimizer
@@ -33,22 +33,24 @@ class SpreadLoss(tf.keras.losses.Loss):
         # Final loss: sum over wrong classes, then average across batch
         return tf.reduce_mean(tf.reduce_sum(loss, axis=1))
 
-        # y_true = tf.cast(y_true, tf.float32)
-        # y_pred = tf.cast(y_pred, tf.float32)
 
-        # # Convert {0,1} labels to {-1,1}
-        # y_true = 2.0 * y_true - 1.0
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "margin_schedule": self.schedule,
+            "max_steps": self.max_steps,
+            # Optimizer is excluded on purpose
+        })
+        return config
 
-        # # Squared hinge loss: max(0, 1 - y_true * y_pred)^2
-        # per_activation_loss = tf.square(tf.maximum(0.0, margin - y_true * y_pred))
-
-        # # Sum over activations, mean over batch
-        # return tf.reduce_mean(tf.reduce_sum(per_activation_loss, axis=-1))
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
     
 
 class CategoricalSquaredHinge(tf.keras.losses.Loss):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def call(self, y_true, y_pred):
         y_true = tf.cast(y_true, tf.float32)

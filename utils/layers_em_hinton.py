@@ -30,6 +30,19 @@ class ReLUConv(tf.keras.layers.Layer):
 
     def call(self, inputs):
         return self.conv(inputs)
+    
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "A": self.num_channels,
+            "kernel_size": self.kernel_size,
+            "stride": self.stride,
+        })
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 
 class PrimaryCaps(tf.keras.layers.Layer):
@@ -112,6 +125,18 @@ class PrimaryCaps(tf.keras.layers.Layer):
         activations_reshaped = tf.math.sigmoid(pre_act_reshaped)
 
         return poses_reshaped, activations_reshaped
+    
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "B": self.num_capsules,
+            "out_atoms": self.out_atoms,
+        })
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 
 class ConvCaps(tf.keras.layers.Layer):
@@ -206,30 +231,18 @@ class ConvCaps(tf.keras.layers.Layer):
         #   b=batch, h=height, w=width, xy=kernel*kernel, i=in_capsules, o=out_capsules  
         #   mnp=pose_matrix (4*4)
         matrices = tf.einsum('bhwxyimn,xyiopn->bhwxyiomp', patches, self.pose_kernel)
-        # shape = tf.shape(patches)  # shape is a Tensor
-        # b, h, w, k, _, i, a, _ = tf.unstack(shape)
-        # kernel = self.pose_kernel
-        # o = tf.shape(kernel)[3]
-        # # First I reshape both to b, h, w, k, k, i, o, a, a
-        # # That is so that both can be broadcasted to the correct numbers
-        # # For the missing dims I put a 1 now, to be broadcasted later
-        # patches_reshape = tf.reshape(patches, (b, h, w, k, k, i, 1, a, a))
-        # kernel_reshape  = tf.reshape(kernel,  (1, 1, 1, k, k, i, o, a, a,))
 
-        # # Then we broadcast them to the same shape. Now we have the same amount
-        # # of tensors in both the patches and the kernels
-        # patch = tf.broadcast_to(patches_reshape, (b, h, w, k, k, i, o, a, a))
-        # kern = tf.broadcast_to(kernel_reshape, (b, h, w, k, k, i, o, a, a))
-
-        # # Now we reshape them, so that we are left with many matrices that can be matmulled
-        # batch_patch = tf.reshape(patch, (b*h*w*k*k*i*o, a, a))
-        # batch_kern = tf.reshape(kern, (b*h*w*k*k*i*o, a, a))
-
-        # matrices = tf.matmul(batch_patch, batch_kern)
-        # matrices = tf.reshape(matrices, (b, h, w, k, k, i, o, a, a))
-
-        #TODO: I am unsure this does the correct multiplications could be summing things
         return matrices
+    
+    def get_config(self):
+        config = super(ConvCaps, self).get_config()
+        config.update({
+            'kernel_size': self.kernel_size,
+            'C': self.out_capsules,
+            'stride': self.stride,
+        })
+        return config
+
 
 
 class ClassCaps(tf.keras.layers.Layer):
@@ -343,6 +356,23 @@ class ClassCaps(tf.keras.layers.Layer):
 
         # Add to poses (broadcasted over batch and capsules)
         return poses + coord
+    
+    def get_config(self):
+        config = super(ClassCaps, self).get_config()
+        # Convert position_grid tuple of arrays to lists
+        config['position_grid'] = self.position_grid
+        config['out_atoms'] = self.out_atoms
+        config['capsules_out'] = self.caps_out
+        return config
+
+    # @classmethod
+    # def from_config(cls, config):
+    #     position_grid_lists = config.pop('position_grid')
+    #     # Convert back from list to numpy arrays
+    #     position_grid = tuple(np.array(arr) for arr in position_grid_lists)
+    #     obj = cls(**config)
+    #     obj.position_grid = position_grid
+    #     return obj
 
 
 
@@ -353,7 +383,7 @@ class EMRouting(tf.keras.layers.Layer):
     them. This layer takes the activations and poses and finds the new 
     activations.
     """
-    def __init__(self, mean_data=1, iterations=2, min_var=0.0005, final_beta=0.01, epsilon_annealing=False, stride=1, original_shape=None, **kwargs):
+    def __init__(self, mean_data=1, iterations=2, min_var=0.0005, final_beta=0.01, epsilon_annealing=False, stride=1, original_shape=None, alpha=0, **kwargs):
         super(EMRouting, self).__init__(**kwargs)
         self.iterations = iterations
         self.min_var = min_var
@@ -364,6 +394,8 @@ class EMRouting(tf.keras.layers.Layer):
 
         # From Gritzman. Has to be manually calcualted for now
         self.mean_data = mean_data  # if 1, this does nothing
+
+        self.alpha = alpha  # moving average for the poses - 0 in the paper, 0.1 in the implementation
 
         # Slowly decrease epsilon, to make model learn faster and be more stable
         self.epsilon_annealing = epsilon_annealing
@@ -426,7 +458,7 @@ class EMRouting(tf.keras.layers.Layer):
             shape=(1, 1, 1, 1, 1, 1, p_shape[6], 1, 1),  # Each higher-level capsule has its own activation cost
             initializer=tf.constant_initializer(0.5),
             name='activation_bias'
-        )
+         )
         # sigma_bias in Hinton's implementation
         self.beta_u = self.add_weight(
             shape=(1, 1, 1, 1, 1, 1, p_shape[6],1, 1),  # Each higher-level capsule has its own activation cost
@@ -466,7 +498,6 @@ class EMRouting(tf.keras.layers.Layer):
         self.out_poses = tf.zeros((b, h, w, 1, 1, 1, o, a, a))
         # post in Hinton's implementation
         self.R_ij = tf.nn.softmax(tf.zeros((b, h, w, k, k, i, o, 1, 1)), axis=6)
-        self.R_ij_prev = self.R_ij
 
 
         # We must add the batch dimension to the indices used for scatter_nd
@@ -540,9 +571,7 @@ class EMRouting(tf.keras.layers.Layer):
         R_ij = self.R_ij
 
         # vote_conf in Hinton's implementation
-        alpha = 0.2
-        R_ij = (R_ij * a_i) * (1 - alpha) + alpha * self.R_ij_prev
-        self.R_ij_prev = R_ij
+        R_ij = R_ij * a_i
         # All values are the same per capsule, just repeated over multiple kernels
         if self.verbose:
             print("R_ij * a_i is:")
@@ -586,12 +615,14 @@ class EMRouting(tf.keras.layers.Layer):
         mu_jh = (tf.reduce_sum(R_ij * V_ij, axis=[3,4,5], keepdims=True) 
                 / (sum_R_ij + epsilon))  # e-7 from Hinton's implementation
                 # e-7 prevents numerical instability (Gritzman, 2019)
+
+        mu_jh = (1 - self.alpha) * mu_jh + self.alpha * self.out_poses
         if self.verbose:
             print("mu_jh is:")
             print(mu_jh)
         # variance in Hinton's implementation
         sigma_jh_sq = (tf.reduce_sum(R_ij * tf.pow((V_ij - mu_jh), 2), axis=[3,4,5], keepdims=True)
-                       / (sum_R_ij + epsilon))
+                       / (sum_R_ij + epsilon)) + 5e-4
         # Make sure the variance is never 0, or super large
         # sigma_jh_sq_clipmax = tf.minimum(sigma_jh_sq, 1e9)
         # tf.print("Clipped ratio (was too large):", tf.reduce_mean(tf.cast(sigma_jh_sq != sigma_jh_sq_clipmax, tf.float32)))
@@ -635,8 +666,8 @@ class EMRouting(tf.keras.layers.Layer):
         # Could have done that immediately but wanted to follow paper's notation
         # a_j = tf.nn.softmax(a_j, axis=6)
         self.out_activations = a_j
-        self.out_poses = mu_jh + epsilon
-        self.sigma_jh_sq = sigma_jh_sq + epsilon
+        self.out_poses = mu_jh
+        self.sigma_jh_sq = sigma_jh_sq
         # R_ij is updated and assigned in e_step
 
     def e_step(self, V_ij):
@@ -771,6 +802,24 @@ class EMRouting(tf.keras.layers.Layer):
                         indices.append(idx)
 
         self.scatter_indices_no_batch = tf.convert_to_tensor(indices)
+
+    def get_config(self):
+        config = super(EMRouting, self).get_config()
+        config.update({
+            "mean_data": self.mean_data,
+            "iterations": self.iterations,
+            "min_var": self.min_var,
+            "final_beta": self.final_lambda,
+            "epsilon_annealing": self.epsilon_annealing,
+            "stride": self.stride,
+            "original_shape": None,  # you can add it if you want to store
+            "alpha": self.alpha,
+        })
+        return config
+    
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 
 class Squeeze(tf.keras.layers.Layer):

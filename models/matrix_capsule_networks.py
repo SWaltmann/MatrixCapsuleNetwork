@@ -4,7 +4,7 @@ import tensorflow as tf
 from utils.layers_em_hinton import ReLUConv, PrimaryCaps, ConvCaps, ClassCaps, EMRouting, DebugLayer, Squeeze, StepCounter
 
 
-def em_capsnet_graph(input_shape, _iterations=2):
+def em_capsnet_graph(input_shape, _iterations=2, alpha=0):
     """ Architecture of EM CapsNet, as described in: 'Matrix Capsules with EM Routing '
 
     Each layer is named after what their output represents
@@ -26,14 +26,14 @@ def em_capsnet_graph(input_shape, _iterations=2):
 
     conv_caps1 = ConvCaps(stride=2)(prim_caps1)
     position_grid = position_grid_conv(position_grid, 3, 2, 'VALID')
-    routing1 = EMRouting(iterations=_iterations)(conv_caps1)    
+    routing1 = EMRouting(iterations=_iterations, alpha=alpha, stride=2)(conv_caps1)    
   
     conv_caps2 = ConvCaps()(routing1)
     position_grid = position_grid_conv(position_grid, 3, 1, 'VALID')
-    routing2 = EMRouting(iterations=_iterations)(conv_caps2)
+    routing2 = EMRouting(iterations=_iterations, alpha=alpha)(conv_caps2)
 
     class_caps = ClassCaps(position_grid)(routing2)
-    outputs = EMRouting(iterations=_iterations)(class_caps) 
+    outputs = EMRouting(iterations=_iterations, alpha=alpha)(class_caps) 
 
     squeezed_outputs = Squeeze()(outputs)
 
@@ -41,7 +41,7 @@ def em_capsnet_graph(input_shape, _iterations=2):
 
     return tf.keras.Model(inputs=inputs,outputs=acts, name='full_EM_CapsNet')
 
-def small_em_capsnet_graph(input_shape, _iterations=2):
+def small_em_capsnet_graph(input_shape, _iterations=2, alpha=0):
     height, width = input_shape[0], input_shape[1]
     x = np.linspace(-1, 1, height)
     y = np.linspace(-1, 1, width)
@@ -59,14 +59,14 @@ def small_em_capsnet_graph(input_shape, _iterations=2):
 
     conv_caps1 = ConvCaps(C=16, stride=2)(prim_caps1)
     position_grid = position_grid_conv(position_grid, 3, 2, 'VALID')
-    routing1 = EMRouting(iterations=_iterations)(conv_caps1) 
+    routing1 = EMRouting(iterations=_iterations, stride=2, alpha=alpha)(conv_caps1) 
   
     conv_caps2 = ConvCaps(C=16)(routing1)
     position_grid = position_grid_conv(position_grid, 3, 1, 'VALID')
-    routing2 = EMRouting(iterations=_iterations)(conv_caps2) 
+    routing2 = EMRouting(iterations=_iterations, alpha=alpha)(conv_caps2) 
 
     class_caps = ClassCaps(position_grid)(routing2)
-    outputs = EMRouting(iterations=_iterations)(class_caps) 
+    outputs = EMRouting(iterations=_iterations, alpha=alpha)(class_caps) 
 
     squeezed_outputs = Squeeze()(outputs)
 
