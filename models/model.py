@@ -90,6 +90,9 @@ class MatrixCapsuleNetwork:
     def save_model(self):
         config = self.config
         self.model.save(config['model_path'], include_optimizer=True)
+        # Without this next part the optimizer states are not saved, making 
+        # training start at step 0 when resumed (ie original learning rate
+        # and margin)
         ckpt = tf.train.Checkpoint(optimizer=self.model.optimizer)
         ckpt.save(os.path.join(self.directory, "latest_optimizer_ckpt"))
 
@@ -146,10 +149,31 @@ class MatrixCapsuleNetwork:
         return loss_fn
     
     def save_history(self, history):
-        # TODO: make this a seperate function and store everything in its own little directory
-        with open("training_history.json", "w") as f:
-            json.dump(history.history, f)
-    
+        history_path = os.path.join(self.directory, "training_history.json")
+        
+        # Start with new history
+        new_history = history.history
+
+        if os.path.exists(history_path):
+            # Load existing history
+            with open(history_path, "r") as f:
+                existing_history = json.load(f)
+            
+            # Append new values to existing history
+            for key, new_values in new_history.items():
+                if key in existing_history:
+                    existing_history[key].extend(new_values)
+                else:
+                    existing_history[key] = new_values
+            combined_history = existing_history
+        else:
+            # No existing history; use new one
+            combined_history = new_history
+
+        # Save the combined history
+        with open(history_path, "w") as f:
+            json.dump(combined_history, f)
+
     def train(self):
         config = self.config
 
@@ -157,7 +181,7 @@ class MatrixCapsuleNetwork:
         
         self.get_model()
 
-        print(f"Starting training from step {self.model.optimizer.iterations.numpy()}")
+        print(f"\nStarting training from step {self.model.optimizer.iterations.numpy()}\n")
         # TODO: append history
         history = self.model.fit(self.train_ds,
                                  validation_data=self.val_ds,
