@@ -174,6 +174,21 @@ class MatrixCapsuleNetwork:
         with open(history_path, "w") as f:
             json.dump(combined_history, f)
 
+    def get_total_epochs(self):
+        """Get the number of epochs the model has already been trained for 
+        by counting the entries in training_history
+        """
+        history_path = os.path.join(self.directory, "training_history.json")
+
+        if os.path.exists(history_path):
+            # Load existing history
+            with open(history_path, "r") as f:
+                history = json.load(f)
+            return len(history['loss'])  # All entries are the same length, chose the loss for no reason
+        else:
+            # No existing history; return 0
+            return 0
+        
     def train(self):
         config = self.config
 
@@ -183,9 +198,11 @@ class MatrixCapsuleNetwork:
 
         print(f"\nStarting training from step {self.model.optimizer.iterations.numpy()}\n")
         # TODO: append history
+        start_epoch = int(self.get_total_epochs())
         history = self.model.fit(self.train_ds,
                                  validation_data=self.val_ds,
-                                 epochs=config['epochs'],
+                                 initial_epoch=start_epoch,
+                                 epochs=start_epoch + config['epochs'],
                                  callbacks=self.callbacks)
         self.save_history(history)
 
