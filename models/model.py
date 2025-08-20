@@ -5,8 +5,6 @@ from utils import loss_functions
 from models import matrix_capsule_networks as mcn
 import os
 import json
-from tqdm.notebook import tqdm
-import time
 
 
 class MatrixCapsuleNetwork:
