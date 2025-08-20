@@ -1,0 +1,2 @@
+tensorflow>=2.16,<2.19
+tensorflow-datasets>=4.9,<5.0

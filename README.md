@@ -1,16 +1,20 @@
 # Matrix Capsule Networks with EM Routing  
 
-Welcome to this repository! 🎉  
+Welcome to this repository!  
 This project is a modular implementation of Hinton’s **Matrix Capsule Networks with EM Routing**, designed for clarity and easy experimentation.
 
 ---
 
 ##  Requirements  
 
-The repository uses **Python** with common ML dependencies (TensorFlow, NumPy, etc.). It has been tested on Python 3.12 with TensorFlow 2.16 and TensorFlow 2.18.
-A complete `requirements.txt` will be added soon.  
+The repository uses **Python** with common ML dependencies (TensorFlow, NumPy, etc.). It has been tested on Python 3.12 with TensorFlow 2.16 and TensorFlow 2.18. Ensure that your GPU is compatible with the tensorflow version you want to install. 
 
----
+Follow the installation instruction on [the TensorFlow website](https://www.tensorflow.org/install). Once TensorFlow is installed, install tensorflow_datasets:
+ ```bash
+   pip install tensorflow-datasets
+```  
+These are the only dependencies of this repository.
+
 
 ## Running Training  
 
@@ -35,7 +39,9 @@ The main entry point is `run_training.py`.
 
 Tip: Keep the number of epochs low during single runs, since only the last model is stored. To train continuously, wrap training in a loop. On my RTX4060, the full model takes 3 minutes/epoch to train. So I tend to set the number of epochs to 20 so it is saved every hour.
 
----
+### Testing a model
+Testing a model not really necessary due to the training set-up that is used by Hinton. While it does not generalize well, it tests the model on the full test set after each epoch. For the test results, you can therefore simply read the `training_history.json` file
+
 
 ## Repository Structure  
 
@@ -49,7 +55,6 @@ This directory contains the configuration and results for each experiment (or ru
   - **`last_model`** – the most recent checkpoint  
   - **`training_history`** – logs of the training progress  
 
----
 
 ### 2. `models/`  
 This directory manages the model logic.  
@@ -57,7 +62,6 @@ This directory manages the model logic.
 - `matrix_capsule_networks.py` defines the actual network architecture (layer order and dimensions).  
 - In short: the config file is translated into a working model here.  
 
----
 
 ### 3. `utils/`  
 This directory provides building blocks and helpers.  
