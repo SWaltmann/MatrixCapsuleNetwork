@@ -1,0 +1,22 @@
+{
+    "dataset_name": "smallnorb",
+    "val_split_strategy": "test",
+    "batch_size": 64,
+    "val_fraction": 0.1,
+    "model_size": "small",
+    "model_path": "experiments/small_model/latest_model.keras",
+    "use_pretrained": true,
+    "learning_rate": 0.003,
+    "lr_decay_rate": 0.96,
+    "lr_decay_steps": 20000.0,
+    "loss_function": "spread_loss",
+    "margin_schedule": "sigmoid",
+    "optimizer": "adamw",
+    "max_margin_steps": 50000.0,
+    "run_eagerly": false,
+    "epochs_comment": "This is the additional epochs the model will train for",
+    "epochs": 100,
+    "iterations": 3,
+    "alpha": 0.1,
+    "comment": "n/a"
+}

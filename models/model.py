@@ -186,7 +186,6 @@ class MatrixCapsuleNetwork:
                 history = json.load(f)
             return len(history['loss'])  # All entries are the same length, chose the loss for no reason
         else:
-            # No existing history; return 0
             return 0
         
     def train(self):
@@ -197,7 +196,6 @@ class MatrixCapsuleNetwork:
         self.get_model()
 
         print(f"\nStarting training from step {self.model.optimizer.iterations.numpy()}\n")
-        # TODO: append history
         start_epoch = int(self.get_total_epochs())
         history = self.model.fit(self.train_ds,
                                  validation_data=self.val_ds,
@@ -214,5 +212,18 @@ class MatrixCapsuleNetwork:
         result = self.model.evaluate(self.test_ds)
         print(result)
 
-    
+    def get_best_model(self):
+        """Load the best model, inject the optimizer of the last model
+        since this will not be used for training anyway
+        """
+        save_path = os.path.join(self.directory, 'BEST_MODEL.keras')
+        self.best_model = tf.keras.models.load_model(save_path)
+        ckpt = tf.train.Checkpoint(optimizer=self.model.optimizer)
+        ckpt.restore(tf.train.latest_checkpoint(self.directory)).expect_partial()
+        self.set_loss_optimizer()
+
+        return self.best_model
+
+        
+
 

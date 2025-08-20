@@ -1,0 +1,1 @@
+The cost for all previous model was calculated by SUBTRACTING the variance. This made bad choices cheaper to activate. Somehow the model learned to adapt the weight to account for this. In this version, I have corrected that. It is corrected in the code of the layer so you won't see the difference anywhere in the config.
